@@ -60,8 +60,8 @@ int Parrilla1Modo = 0;
 int Parrilla2TdV = 0;
 int Parrilla2TT = 0;
 int Parrilla2Modo = 0;
-int Parrilla1Ter = 0;
-int Parrilla2Ter = 0;
+float Parrilla1Ter = 0;
+float Parrilla2Ter = 0;
 unsigned long tInicialP1;
 unsigned long tInicialP2;
 bool bajandoParrilla = false;
@@ -187,15 +187,13 @@ void setup()
 void loop() 
 {
   unsigned long currentMillis = millis(); //Obtiene tiempo corrido en milisegundos
-  controlActivo = true;
   verificaInterrupciones(); //Bloquea o desloquea giros del motor
   if (SerialBT.available()) recibeDatos(); //Si hay mensaje en el buffer llama a función de recepción
-
   //Control cada 30 segundos
   if ((currentMillis - previousMillis) >= (5 * 1000)) //Condición que solo se activa cada 30 segundos       MODIFICAR TIEMPO DE CONTROL
   {
     previousMillis = currentMillis; //Actualización de valores
-    controlTemp();
+    //controlTemp();
     if (controlActivo == true)
     {
       controlTemp(); //Llamada a función de control de temperatura
@@ -205,26 +203,38 @@ void loop()
     {
       Serial.println("Control deshabilitado.");
     }
+
+    //Monitoreo de parrillas y envío de datos
     int P = 1;
     monitoreaParrilla(P);
+    float TempParr1 = leeTempNTC(P);
     P = 2;
     monitoreaParrilla(P);
+    float TempParr2 = leeTempNTC(P);
 
-    
+    Serial.println(" ");
+    P = 1;
+    float TempBrasero = ((termopar1.readCelsius() + termopar2.readCelsius())/2);
+    String mensaje = String(TempBrasero) + ";" + String(TempParr1) + ";" + String(TempParr2);
+
+    SerialBT.println(mensaje);
   }
   
+  currentMillis = millis();
   if (bajandoParrilla)
   {
-    if ((currentMillis - previousMillisBrasero) >= (60 * 1000))
+    unsigned long tiempo = (currentMillis - previousMillisBrasero);
+
+    if ((tiempo) >= (60000))
     {
       parrillaAbajo = true;
       controlActivo = true;
       bajandoParrilla = false;
+      Serial.println("Brasero llegó abajo");
     }
   }
   motor1.run();
   motor2.run();
-  
 }
 
 float leeTempNTC(int sensor) //SENSOR NTC 1 O 2
@@ -362,7 +372,7 @@ void verificaInterrupciones()
 void recibeDatos()
 {
   int Parrilla = 0, TiempoVolteo = 0, TiempoTotal = 0;;
-  int Ter;
+  float Ter;
 
   String comando = SerialBT.readStringUntil('\n');  // Lee hasta el '\n'
   comando.trim(); // Elimina espacios y saltos extras
@@ -476,14 +486,12 @@ void recibeDatos()
 
 void monitoreaParrilla(int Parr)
 {
-  //Serial.println("MP");
   
   if (Parr == 1)
   {
     if (Parrilla1Modo == 1)
     {
       monitoreaTemperatura(Parr);
-      Serial.println("MP");
     }
     else if (Parrilla1Modo == 2)
     {
@@ -510,30 +518,34 @@ void monitoreaTemperatura(int Parr)
 
   if (Parr == 1)
   {
-    leeTempNTC(Parr);
+    temp = leeTempNTC(Parr);
+    Serial.println(EstadoParrilla1);
+    Serial.println(Parrilla1Ter);
+    Serial.println(" ");
     if (temp >= Parrilla1Ter*0.7 && EstadoParrilla1 == 0)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla1);
-      EstadoParrilla1 = 1;
+      Serial.println("Primera vuelta a parrilla 1.");
     }
     if (temp >= Parrilla1Ter && EstadoParrilla1 == 1)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla1);
-      EstadoParrilla1 = 2;
+      Serial.println("Segunda vuelta a parrilla 1.");
     }
   }
   else if (Parr == 2)
   {
-    leeTempNTC(Parr);
+    temp = leeTempNTC(Parr);
+    Serial.println(EstadoParrilla2);
     if (temp >= Parrilla2Ter*0.7 && EstadoParrilla2 == 0)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla2);
-      EstadoParrilla2 = 1;
+      Serial.println("Primera vuelta a parrilla 2.");
     }
     if (temp >= Parrilla2Ter && EstadoParrilla2 == 1)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla2);
-      EstadoParrilla2 = 2;
+      Serial.println("Segunda vuelta a parrilla 2.");
     }
   }
 }
@@ -546,12 +558,10 @@ void monitoreaTiempo(int Parr)
     if ((tActual - tInicialP1 >= Parrilla1TdV*60/1000) && EstadoParrilla1 == 0)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla1);
-      EstadoParrilla1 = 1;
     }
     if ((tActual - tInicialP1 >= Parrilla1TT*60/1000) && EstadoParrilla1 == 1)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla2);
-      EstadoParrilla1 = 2;
     }
   }
   else if (Parr == 2)
@@ -594,10 +604,15 @@ void mediaVueltaParrilla(int Parr, int Estado)
       if (Estado == 0)
       {
         motor1.move(200);
+        Serial.println("Dando primera vuelta a parrilla 1.");
+        EstadoParrilla1 = 1;
       }
       else if (Estado == 1)
       {
         motor1.move(-200);
+        Serial.println("Dando segunda vuelta a parrilla 1.");
+        EstadoParrilla1 = 0;
+        Parrilla1Modo = 0;
       }
     }
     else if (Parr == 2)
@@ -605,10 +620,15 @@ void mediaVueltaParrilla(int Parr, int Estado)
       if (Estado == 0)
       {
         motor2.move(200);
+        Serial.println("Dando primera vuelta a parrilla 2.");
+        EstadoParrilla2 = 1;
       }
       else if (Estado == 1)
       {
         motor2.move(-200);
+        Serial.println("Dando segunda vuelta a parrilla 2.");
+        EstadoParrilla2 = 0;
+        Parrilla2Modo = 0;
       }
     }
     parrillaAbajo = false;
@@ -620,6 +640,8 @@ void mediaVueltaParrilla(int Parr, int Estado)
       int PWM = 255;
       mandaPWM(GIRO_IZQ, PWM);
       previousMillisBrasero = millis();
+      Serial.println("Inicio de timer 60 seg.");
+      controlActivo = false;
     }
     bajandoParrilla = true;
   }
