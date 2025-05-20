@@ -128,10 +128,12 @@ void IRAM_ATTR detieneGiroDerecha()
   if (estado) 
   {
     detenerDerecha = true;
+    digitalWrite(VENT, HIGH);
   } 
   else 
   {
     seguirDerecha = true;
+    digitalWrite(VENT, LOW);
   }
 }
 
@@ -405,7 +407,7 @@ void recibeDatos()
         Ter = 71; //Bien hecho
         Serial.print("Parrilla ");
         Serial.print(Parrilla);
-        Serial.println(" configurada en modo automático a término bien hecho.");
+        Serial.println(" configurada en modo automático a término bien cocido.");
         break;
       
       case 'X':
