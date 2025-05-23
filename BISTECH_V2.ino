@@ -103,7 +103,10 @@ void recibeDatos();
 void iniciaTiempo(int Parr);
 
 //Interrupciones
-void verificaInterrupciones();
+//void verificaInterrupciones();
+void verificaLS();
+
+/*
 void IRAM_ATTR detieneGiroIzquierda() 
 {
   bool estado = digitalRead(LIMSW1);
@@ -112,7 +115,7 @@ void IRAM_ATTR detieneGiroIzquierda()
 
   if (estado) 
   {
-    detenerIzquierda = true;;
+    detenerIzquierda = true;
   } 
   else 
   {
@@ -132,11 +135,12 @@ void IRAM_ATTR detieneGiroDerecha()
   } 
   else 
   {
+    detenerDerecha = false;
     seguirDerecha = true;
     digitalWrite(VENT, LOW);
   }
 }
-
+*/
 //------------------------------------------------------------------------------  Setup  ---------------------------------------------------------------------------------
 void setup() 
 {
@@ -166,12 +170,9 @@ void setup()
 
   analogReadResolution(12);
 
-  //Limit switch para interrupciones
+  //Limit switch
   pinMode(LIMSW1, INPUT_PULLDOWN);
-  attachInterrupt(digitalPinToInterrupt(LIMSW1), detieneGiroIzquierda, CHANGE);
-
   pinMode(LIMSW2, INPUT_PULLDOWN);
-  attachInterrupt(digitalPinToInterrupt(LIMSW2), detieneGiroDerecha, CHANGE);
   
 
   motor1.setMaxSpeed(100);
@@ -189,7 +190,10 @@ void setup()
 void loop() 
 {
   unsigned long currentMillis = millis(); //Obtiene tiempo corrido en milisegundos
-  verificaInterrupciones(); //Bloquea o desloquea giros del motor
+  //verificaInterrupciones(); //Bloquea o desloquea giros del motor
+
+  verificaLS();
+
   if (SerialBT.available()) recibeDatos(); //Si hay mensaje en el buffer llama a función de recepción
   //Control cada 30 segundos
   if ((currentMillis - previousMillis) >= (5 * 1000)) //Condición que solo se activa cada 30 segundos       MODIFICAR TIEMPO DE CONTROL
@@ -216,10 +220,13 @@ void loop()
 
     Serial.println(" ");
     P = 1;
-    float TempBrasero = ((termopar1.readCelsius() + termopar2.readCelsius())/2);
+    float TempBrasero = (termopar1.readCelsius());
     String mensaje = String(TempBrasero) + ";" + String(TempParr1) + ";" + String(TempParr2);
 
     SerialBT.println(mensaje);
+
+    Serial.println(LACT);
+    Serial.println(RACT);
   }
   
   currentMillis = millis();
@@ -265,8 +272,8 @@ float leeTempNTC(int sensor) //SENSOR NTC 1 O 2
 
 float leeTempTermopares()
 {
-  float TTK = (termopar1.readCelsius() + termopar2.readCelsius())/2;
-  Serial.print("Tempratura promedio en termopares: ");
+  float TTK = (termopar1.readCelsius());
+  Serial.print("Tempratura en parrillas: ");
   Serial.print(TTK);
   Serial.println(" °C");
 
@@ -336,6 +343,7 @@ void controlTemp()
   }
 }
 
+/*
 void verificaInterrupciones()
 {
   if (detenerIzquierda) 
@@ -368,6 +376,34 @@ void verificaInterrupciones()
     RACT = true;
     Serial.println("Giro a derecha habilitado.");
     controlTemp();
+  }
+}
+*/
+
+void verificaLS()
+{
+  if (digitalRead(LIMSW1))
+  {
+    LACT = false;
+    ledcWrite(LPWM, 0);
+  }
+  else
+  {
+    LACT = true;
+    //controlTemp();
+  }
+
+  if (digitalRead(LIMSW2))
+  {
+    RACT = false;
+    ledcWrite(RPWM, 0);
+    digitalWrite(VENT, HIGH);
+  }
+  else
+  {
+    RACT = true;
+    digitalWrite(VENT, LOW);
+    //controlTemp();
   }
 }
 
@@ -557,26 +593,24 @@ void monitoreaTiempo(int Parr)
   unsigned long tActual = millis();
   if (Parr == 1)
   {
-    if ((tActual - tInicialP1 >= Parrilla1TdV*60/1000) && EstadoParrilla1 == 0)
+    if ((tActual - tInicialP1 >= Parrilla1TdV*60*1000) && EstadoParrilla1 == 0)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla1);
     }
-    if ((tActual - tInicialP1 >= Parrilla1TT*60/1000) && EstadoParrilla1 == 1)
+    if ((tActual - tInicialP1 >= Parrilla1TT*60*1000) && EstadoParrilla1 == 1)
     {
-      mediaVueltaParrilla(Parr, EstadoParrilla2);
+      mediaVueltaParrilla(Parr, EstadoParrilla1);
     }
   }
   else if (Parr == 2)
   {
-    if ((tActual - tInicialP2 >= Parrilla2TdV*60/1000) && EstadoParrilla2 == 0)
-    {
-      mediaVueltaParrilla(Parr, EstadoParrilla1);
-      EstadoParrilla2 = 1;
-    }
-    if ((tActual - tInicialP1 >= Parrilla2TT*60/1000) && EstadoParrilla2 == 1)
+    if ((tActual - tInicialP2 >= Parrilla2TdV*60*1000) && EstadoParrilla2 == 0)
     {
       mediaVueltaParrilla(Parr, EstadoParrilla2);
-      EstadoParrilla2 = 2;
+    }
+    if ((tActual - tInicialP1 >= Parrilla2TT*60*1000) && EstadoParrilla2 == 1)
+    {
+      mediaVueltaParrilla(Parr, EstadoParrilla2);
     }
   }
 }
@@ -615,6 +649,9 @@ void mediaVueltaParrilla(int Parr, int Estado)
         Serial.println("Dando segunda vuelta a parrilla 1.");
         EstadoParrilla1 = 0;
         Parrilla1Modo = 0;
+
+        String mensaje = "1L";
+        SerialBT.println(mensaje);
       }
     }
     else if (Parr == 2)
@@ -631,6 +668,9 @@ void mediaVueltaParrilla(int Parr, int Estado)
         Serial.println("Dando segunda vuelta a parrilla 2.");
         EstadoParrilla2 = 0;
         Parrilla2Modo = 0;
+
+        String mensaje = "2L";
+        SerialBT.println(mensaje);
       }
     }
     parrillaAbajo = false;
